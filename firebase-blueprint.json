@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "Document": {
+      "title": "Document",
+      "description": "A collaborative document containing multiple sheets.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the document", "maxLength": 100 },
+        "ownerId": { "type": "string", "description": "The UID of the user who created the document" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "ownerId", "createdAt", "updatedAt"]
+    },
+    "Row": {
+      "title": "Row",
+      "description": "A single row of data inside a sheet.",
+      "type": "object",
+      "properties": {
+        "index": { "type": "number", "description": "The row index" },
+        "data": { "type": "object", "description": "Map of column names to values" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["index", "data", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/Document" },
+      "description": "Stores document metadata."
+    },
+    "/documents/{documentId}/sheets/{sheetId}/rows/{rowId}": {
+      "schema": { "$ref": "#/entities/Row" },
+      "description": "Stores individual row data inside a specific sheet of a document."
+    }
+  }
+}

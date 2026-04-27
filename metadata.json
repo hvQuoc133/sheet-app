@@ -1,0 +1,6 @@
+{
+  "name": "Collaborative Sheets App",
+  "description": "A web application that allows users to create, edit, and share Excel-like documents with multiple sheets in real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
