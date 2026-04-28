@@ -1,21 +1,11 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-
-export const signInAnonymouslyWithFirebase = async () => {
-  try {
-    const result = await signInAnonymously(auth);
-    return result.user;
-  } catch (error) {
-    console.error("Error signing in anonymously", error);
-    throw error;
-  }
-};
 
 export const logout = async () => {
   try {
