@@ -61,6 +61,37 @@ export default function Home() {
   const [showLocationSelect, setShowLocationSelect] = useState(false);
   const locationWrapRef = useRef<HTMLDivElement>(null);
 
+  const isValidUrl = (urlStr: string) => {
+    try {
+      const url = new URL(urlStr);
+      return url.protocol === "http:" || url.protocol === "https:";
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const filledHeadlines = formData.headlines.filter(v => v.trim() !== "");
+  const filledDescriptions = formData.descriptions.filter(v => v.trim() !== "");
+
+  const hasHeadlineLengthError = formData.headlines.some(v => v.length > 30);
+  const hasDescLengthError = formData.descriptions.some(v => v.length > 90);
+  const path1TooLong = formData.path1.length > 15;
+  const path2TooLong = formData.path2.length > 15;
+  const isFinalUrlValid = !!formData.finalUrl && isValidUrl(formData.finalUrl);
+  const headlinesCountValid = filledHeadlines.length >= 3;
+  const descCountValid = filledDescriptions.length >= 2;
+
+  const isFormValid = !!formData.campaign && isFinalUrlValid && !path1TooLong && !path2TooLong && !hasHeadlineLengthError && !hasDescLengthError && headlinesCountValid && descCountValid;
+
+  const handleArrayBlur = (field: 'headlines' | 'descriptions') => {
+    const arr = formData[field];
+    const filled = arr.filter(v => v.trim() !== "");
+    const compacted = [...filled, ...Array(arr.length - filled.length).fill("")];
+    if (arr.some((val, i) => val !== compacted[i])) {
+      setFormData(prev => ({ ...prev, [field]: compacted }));
+    }
+  };
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (locationWrapRef.current && !locationWrapRef.current.contains(event.target as Node)) {
@@ -111,6 +142,11 @@ export default function Home() {
     e.preventDefault();
     if (!currentUser) return;
 
+    if (!isFormValid) {
+      toast.error("Please fix all validation errors before saving.");
+      return;
+    }
+
     if (formData.location && !COUNTRIES.find(c => c.toLowerCase() === formData.location.toLowerCase().trim())) {
       toast.error("Please enter a standard English country name (e.g., Vietnam, United States)");
       return;
@@ -120,19 +156,29 @@ export default function Home() {
     try {
       let newDocId = editingDocId;
       
+      const compactedHeadlines = [...formData.headlines.filter(v => v.trim() !== ""), ...Array(15).fill("")].slice(0, 15);
+      const compactedDescriptions = [...formData.descriptions.filter(v => v.trim() !== ""), ...Array(4).fill("")].slice(0, 4);
+
+      const compactedFormData = {
+        ...formData,
+        headlines: compactedHeadlines,
+        descriptions: compactedDescriptions
+      };
+      
       if (editingDocId) {
         // Cập nhật
         const docRef = doc(db, "documents", editingDocId);
         await updateDoc(docRef, {
-          title: formData.campaign || "Untitled",
-          formData: formData,
+          title: compactedFormData.campaign || "Untitled",
+          formData: compactedFormData,
           updatedAt: serverTimestamp(),
         });
         
         // Cập nhật state local
+        setFormData(compactedFormData);
         setMyDocs(prev => prev.map(d => 
           d.id === editingDocId 
-            ? { ...d, title: formData.campaign || "Untitled", formData, updatedAt: { toMillis: () => Date.now() } } 
+            ? { ...d, title: compactedFormData.campaign || "Untitled", formData: compactedFormData, updatedAt: { toMillis: () => Date.now() } } 
             : d
         ));
         toast.success("Campaign updated successfully!");
@@ -140,8 +186,8 @@ export default function Home() {
         // Tạo mới
         const docRef = await addDoc(collection(db, "documents"), {
           ownerId: currentUser.uid,
-          title: formData.campaign || "Untitled",
-          formData: formData,
+          title: compactedFormData.campaign || "Untitled",
+          formData: compactedFormData,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -150,11 +196,12 @@ export default function Home() {
         const newDocPreview = {
           id: docRef.id,
           ownerId: currentUser.uid,
-          title: formData.campaign || "Untitled",
-          formData: formData,
+          title: compactedFormData.campaign || "Untitled",
+          formData: compactedFormData,
           updatedAt: { toMillis: () => Date.now() }
         };
         
+        setFormData(compactedFormData);
         setMyDocs(prev => [newDocPreview, ...prev]);
         setEditingDocId(newDocId);
         toast.success("Campaign created successfully!");
@@ -205,7 +252,7 @@ export default function Home() {
   };
 
   const handleCopyLink = (docId: string) => {
-    const link = `${window.location.origin}/d/${docId}?auto=true`;
+    const link = `${window.location.origin}/api/download/${docId}.xlsx`;
     navigator.clipboard.writeText(link);
     setCopiedId(docId);
     setTimeout(() => setCopiedId(null), 2000);
@@ -233,10 +280,10 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 items-start">
+      <div className="max-w-5xl mx-auto flex flex-col md:flex-row gap-6 items-start">
         
-        {/* Form add camping */}
-        <div className="w-full md:w-3/4">
+        {/* FORM CỘT TRÁI (HOẶC HIỂN THỊ PHÍA TRÊN Ở MOBILE) */}
+        <div className="w-full md:w-2/3">
           <div className="text-center mb-5">
             <h1 className="text-2xl font-bold text-blue-700 flex items-center justify-center gap-3">
               2BT-TEAM-ADS
@@ -275,7 +322,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* CREATE NEW CAMPAIGN */}
+              {/* Sheet 1: CREATE NEW CAMPAIGN */}
               <div>
                 <h2 className="text-sm sm:text-base font-bold text-gray-800 mb-3 border-b pb-1.5">Sheet 1: CREATE NEW CAMPAIGN</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -319,55 +366,59 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* CREATE NEW AD GROUP */}
+              {/* Content ads */}
               <div>
-                <h2 className="text-sm sm:text-base font-bold text-gray-800 mb-3 border-b pb-1.5">Sheet 2: CREATE NEW AD GROUP</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Ad group</label>
-                    <input required value={formData.adGroup} onChange={(e) => setFormData({...formData, adGroup: e.target.value})} className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-shadow text-sm" />
-                  </div>
-                </div>
-              </div>
-
-              {/* VBBBBBBB */}
-              <div>
-                <h2 className="text-sm sm:text-base font-bold text-gray-800 mb-3 border-b pb-1.5">Sheet 3: VBBBBBBB (Ad)</h2>
+                <h2 className="text-sm sm:text-base font-bold text-gray-800 mb-3 border-b pb-1.5">Sheet 2: Content ads</h2>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Final URL</label>
-                    <input value={formData.finalUrl} onChange={(e) => setFormData({...formData, finalUrl: e.target.value})} className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-shadow text-sm" />
+                    <input required value={formData.finalUrl} onChange={(e) => setFormData({...formData, finalUrl: e.target.value})} className={`w-full px-2.5 py-1.5 border ${!isFinalUrlValid && formData.finalUrl ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-green-500'} rounded-lg focus:ring-2 outline-none transition-shadow text-sm`} />
+                    {!isFinalUrlValid && formData.finalUrl && <p className="text-[10px] text-red-500 mt-1">Must be a valid URL (e.g. https://...)</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Path 1</label>
-                    <input value={formData.path1} onChange={(e) => setFormData({...formData, path1: e.target.value})} className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-shadow text-sm" />
+                    <input value={formData.path1} onChange={(e) => setFormData({...formData, path1: e.target.value})} className={`w-full px-2.5 py-1.5 border ${path1TooLong ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-green-500'} rounded-lg focus:ring-2 outline-none transition-shadow text-sm`} />
+                    {path1TooLong && <p className="text-[10px] text-red-500 mt-1">Max 15 characters ({formData.path1.length}/15)</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Path 2</label>
-                    <input value={formData.path2} onChange={(e) => setFormData({...formData, path2: e.target.value})} className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-shadow text-sm" />
+                    <input value={formData.path2} onChange={(e) => setFormData({...formData, path2: e.target.value})} className={`w-full px-2.5 py-1.5 border ${path2TooLong ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-green-500'} rounded-lg focus:ring-2 outline-none transition-shadow text-sm`} />
+                    {path2TooLong && <p className="text-[10px] text-red-500 mt-1">Max 15 characters ({formData.path2.length}/15)</p>}
                   </div>
                 </div>
 
                 <div className="mb-5">
-                  <label className="block text-xs font-bold text-gray-700 mb-2 bg-gray-100 p-1.5 rounded text-center">Headlines (1-15)</label>
+                  <div className="flex flex-col mb-2">
+                    <label className="block text-xs font-bold text-gray-700 bg-gray-100 p-1.5 rounded text-center">Headlines (1-15)</label>
+                    <p className={`text-[10px] text-center mt-1 ${!headlinesCountValid ? 'text-red-500' : 'text-gray-500'}`}>Must fill at least 3 headlines (Max 30 chars each). Filled: {filledHeadlines.length}/3</p>
+                  </div>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
                     {formData.headlines.map((hl, i) => (
-                      <div key={i} className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg border border-gray-100">
-                        <span className="text-[10px] sm:text-xs font-medium text-gray-500 min-w-[60px] text-right pr-1.5">Headline {i + 1}</span>
-                        <input value={hl} onChange={(e) => updateArrayField('headlines', i, e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 outline-none transition-shadow text-xs sm:text-sm min-w-0" />
+                      <div key={i} className="flex flex-col gap-1.5">
+                        <div className={`flex items-center gap-1.5 p-1 rounded-lg border ${hl.length > 30 ? 'border-red-300 bg-red-50' : 'border-gray-100 bg-gray-50'}`}>
+                          <span className="text-[10px] sm:text-xs font-medium text-gray-500 min-w-[60px] text-right pr-1.5">Headline {i + 1}</span>
+                          <input onBlur={() => handleArrayBlur('headlines')} value={hl} onChange={(e) => updateArrayField('headlines', i, e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 outline-none transition-shadow text-xs sm:text-sm min-w-0" />
+                        </div>
+                        {hl.length > 30 && <p className="text-[10px] text-red-500 pl-[70px]">Character limit exceeded ({hl.length}/30)</p>}
                       </div>
                     ))}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2 bg-gray-100 p-1.5 rounded text-center">Descriptions (1-4)</label>
+                  <div className="flex flex-col mb-2">
+                    <label className="block text-xs font-bold text-gray-700 bg-gray-100 p-1.5 rounded text-center">Descriptions (1-4)</label>
+                    <p className={`text-[10px] text-center mt-1 ${!descCountValid ? 'text-red-500' : 'text-gray-500'}`}>Must fill at least 2 descriptions (Max 90 chars each). Filled: {filledDescriptions.length}/2</p>
+                  </div>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
                     {formData.descriptions.map((desc, i) => (
-                      <div key={i} className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg border border-gray-100">
-                        <span className="text-[10px] sm:text-xs font-medium text-gray-500 min-w-[70px] text-right pr-1.5">Description {i + 1}</span>
-                        <input value={desc} onChange={(e) => updateArrayField('descriptions', i, e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 outline-none transition-shadow text-xs sm:text-sm min-w-0" />
+                      <div key={i} className="flex flex-col gap-1.5">
+                        <div className={`flex items-center gap-1.5 p-1 rounded-lg border ${desc.length > 90 ? 'border-red-300 bg-red-50' : 'border-gray-100 bg-gray-50'}`}>
+                          <span className="text-[10px] sm:text-xs font-medium text-gray-500 min-w-[70px] text-right pr-1.5">Description {i + 1}</span>
+                          <input onBlur={() => handleArrayBlur('descriptions')} value={desc} onChange={(e) => updateArrayField('descriptions', i, e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 outline-none transition-shadow text-xs sm:text-sm min-w-0" />
+                        </div>
+                        {desc.length > 90 && <p className="text-[10px] text-red-500 pl-[80px]">Character limit exceeded ({desc.length}/90)</p>}
                       </div>
                     ))}
                   </div>
@@ -377,7 +428,7 @@ export default function Home() {
               <div className="pt-4 mt-4 border-t border-gray-200 flex justify-end">
                 <button 
                   type="submit" 
-                  disabled={loading}
+                  disabled={loading || !isFormValid}
                   className={`${editingDocId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-green-600 hover:bg-green-700'} text-white font-medium px-6 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 text-sm sm:w-auto justify-center`}
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingDocId ? <Save className="w-4 h-4" /> : <UploadCloud className="w-4 h-4" />)}
@@ -389,8 +440,8 @@ export default function Home() {
           </form>
         </div>
 
-        {/* List file */}
-        <div className="w-full md:w-1/4 space-y-4">
+        {/* DANH SÁCH FILE VỪA TẠO CỘT PHẢI (HOẶC BÊN DƯỚI Ở MOBILE) */}
+        <div className="w-full md:w-1/3 space-y-4">
           <div className="sm:hidden flex justify-between items-center mb-4">
             <span className="text-sm text-gray-600 font-medium truncate max-w-[200px]">{currentUser.email?.replace('@2bt.com', '')}</span>
              <button 

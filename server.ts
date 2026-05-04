@@ -21,10 +21,8 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
-// Trạng thái xác thực của Server
 let serverAuthenticated = false;
 
-// Đăng nhập server ẩn danh để thoả mãn rules require auth != null của Firestore
 signInAnonymously(auth).then(() => {
   serverAuthenticated = true;
   console.log("Server Firebase Auth connected.");
@@ -32,7 +30,7 @@ signInAnonymously(auth).then(() => {
   console.error("Server Firebase Auth error:", err);
 });
 
-// Cấu hình mã bảo vệ cho Google Ads (Basic Auth)
+// Google Ads (Basic Auth)
 const GOOGLE_ADS_USERNAME = "admin";
 const GOOGLE_ADS_PASSWORD = "123";
 
@@ -40,10 +38,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Xử lý luồng tải xuống cho Google Ads (API endpoint)
-  app.get("/api/download/:docId", async (req, res) => {
+  app.get("/api/download/:fileName", async (req, res) => {
     try {
-      // 1. Kiểm tra Basic Authentication
+      // Basic Authentication
       const b64auth = (req.headers.authorization || "").split(" ")[1] || "";
       const [login, password] = Buffer.from(b64auth, "base64").toString().split(":");
       
@@ -53,14 +50,15 @@ async function startServer() {
         return;
       }
 
-      // 2. Chờ server Firebase khởi tạo nếu cần
       if (!serverAuthenticated) {
         res.status(503).send("Server initialization in progress. Retry shortly.");
         return;
       }
 
+      const fileName = req.params.fileName;
+      const docId = fileName.replace(/\.xlsx$/, "");
+
       // 3. Lấy dữ liệu từ Firestore
-      const docId = req.params.docId;
       const docRef = doc(db, "documents", docId);
       const docSnap = await getDoc(docRef);
 
@@ -76,10 +74,8 @@ async function startServer() {
         return;
       }
 
-      // 4. Sinh file Excel bằng thư viện xlsx (3 Sheet structure)
       const wb = XLSX.utils.book_new();
 
-      // Cấu hình Header (được sao chép từ SHEETS_CONFIG)
       const SHEETS_CONFIG = [
         {
           id: "campaigns",
@@ -102,8 +98,8 @@ async function startServer() {
           ]
         },
         {
-          id: "vbbbbbbb",
-          name: "VBBBBBBB",
+          id: "content_ads",
+          name: "Content ads",
           columns: [
             "Action", "Ad status", "Campaign ID", "Customer ID", "Campaign", "Ad group", "Final URL",
             "Headline 1", "Headline 1 position", "Headline 2", "Headline 2 position", "Headline 3", "Headline 3 position",
@@ -125,13 +121,13 @@ async function startServer() {
         "Action": "Add",
         "Campaign status": "",
         "Campaign": formData.campaign,
-        "Campaign type": formData.campaignType,
+        "Campaign type": formData.campaignType || "Search",
         "Networks": "Google Search",
         "Budget": formData.budget,
         "Budget type": "Daily",
         "Bid strategy type": "Manual CPC",
-        "Language": formData.language,
-        "Location": "Indonesia",
+        "Language": formData.language || "en",
+        "Location": formData.location || "",
         "EU political ads": "No"
       }];
       const wsCampaign = XLSX.utils.json_to_sheet(wsCampaignData, { header: SHEETS_CONFIG[0].columns });
@@ -142,13 +138,13 @@ async function startServer() {
         "Action": "Add",
         "Status": "Enabled",
         "Campaign": formData.campaign,
-        "Ad group": formData.adGroup,
+        "Ad group": "Ad group 1",
         "Ad group type": "Standard"
       }];
       const wsAdGroup = XLSX.utils.json_to_sheet(wsAdGroupData, { header: SHEETS_CONFIG[1].columns });
       XLSX.utils.book_append_sheet(wb, wsAdGroup, "CREATE NEW AD GROUP");
 
-      // -- Sheet 3: VBBBBBBB --
+      // -- Sheet 3: Content ads --
       const adsRow: any = {
         "Action": "Add",
         "Ad status": "Enabled",
@@ -156,7 +152,7 @@ async function startServer() {
         "Ad strength": "Good",
         "Ad type": "Responsive search ad",
         "Campaign": formData.campaign || "",
-        "Ad group": formData.adGroup || "",
+        "Ad group": "Ad group 1",
         "Final URL": formData.finalUrl || "",
         "Path 1": formData.path1 || "",
         "Path 2": formData.path2 || "",
@@ -177,10 +173,10 @@ async function startServer() {
       const wsAds = XLSX.utils.json_to_sheet([adsRow], { header: SHEETS_CONFIG[2].columns });
       XLSX.utils.book_append_sheet(wb, wsAds, "VBBBBBBB");
       
-      // Xuất ra dạng buffer theo chuẩn
+
       const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-      // Cấu hình Header trả về cho Google Ads
+
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${formData.campaign || "google_ads_data"}.xlsx"`);
       res.send(buffer);
@@ -191,7 +187,7 @@ async function startServer() {
     }
   });
 
-  // Tích hợp Vite middleware phục vụ cho react ở môi trường dev
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -199,7 +195,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Phục vụ file build Production nếu có
+
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {

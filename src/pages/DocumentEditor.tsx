@@ -107,7 +107,7 @@ export default function DocumentEditor() {
       "Action": "Add",
       "Status": "Enabled",
       "Campaign": data.campaign,
-      "Ad group": data.adGroup,
+      "Ad group": "Ad group 1",
       "Ad group type": "Standard"
     }];
     const wsAdGroup = XLSX.utils.json_to_sheet(wsAdGroupData, { header: SHEETS_CONFIG[1].columns });
@@ -121,7 +121,7 @@ export default function DocumentEditor() {
       "Ad strength": "Good",
       "Ad type": "Responsive search ad",
       "Campaign": data.campaign || "",
-      "Ad group": data.adGroup || "",
+      "Ad group": "Ad group 1",
       "Final URL": data.finalUrl || "",
       "Path 1": data.path1 || "",
       "Path 2": data.path2 || "",
